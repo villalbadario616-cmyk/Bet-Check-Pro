@@ -3,47 +3,40 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bet-Check Pro | Final Production</title>
+    <title>Bet-Check Pro | Final Fix</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         body { background-color: #020617; font-family: ui-sans-serif, system-ui; }
-        .match-card { background: #0f172a; border: 1px solid #1e293b; border-left: 4px solid #22c55e; transition: transform 0.2s; }
-        .match-card:active { transform: scale(0.98); }
+        .match-card { background: #0f172a; border: 1px solid #1e293b; border-left: 4px solid #22c55e; }
         .glow-text { text-shadow: 0 0 8px rgba(34, 197, 94, 0.4); }
     </style>
 </head>
 <body class="text-slate-100">
 
     <nav class="sticky top-0 z-50 bg-slate-900/95 border-b border-slate-800 px-6 py-4 flex justify-between items-center">
-        <div>
-            <h1 class="text-xl font-black italic tracking-tighter uppercase text-white">Bet-Check <span class="text-green-500">Pro</span></h1>
-            <p id="api-status" class="text-[9px] font-bold text-slate-500 uppercase tracking-widest">Estado: En espera</p>
-        </div>
+        <h1 class="text-xl font-black italic uppercase text-white">Bet-Check <span class="text-green-500">Pro</span></h1>
         <div id="led" class="w-2 h-2 rounded-full bg-yellow-500 shadow-[0_0_10px_#eab308]"></div>
     </nav>
 
     <main class="p-4 max-w-md mx-auto">
         <div id="logs" class="mb-4 p-3 bg-black rounded-xl border border-slate-800 font-mono text-[10px] text-green-400 h-28 overflow-y-auto leading-tight shadow-inner">
-            > Nodo central activo en GitHub Pages...
-            > Esperando sincronización de 5 núcleos API.
+            > Sistema reconfigurado. Listo para usar nuevas llaves.
         </div>
 
-        <button onclick="startSync()" class="w-full bg-green-600 hover:bg-green-500 py-4 rounded-2xl font-black uppercase italic tracking-widest mb-8 shadow-lg shadow-green-900/40 active:scale-95 transition-all">
+        <button onclick="startSync()" class="w-full bg-green-600 hover:bg-green-500 py-4 rounded-2xl font-black uppercase italic tracking-widest mb-8 shadow-lg active:scale-95 transition-all">
             Sincronizar Datos Reales
         </button>
 
-        <div id="match-container" class="space-y-4 pb-12 text-center">
-            <p class="text-slate-500 text-[10px] mt-10 uppercase font-bold tracking-[0.2em]">Pulsa para conectar con el feed global</p>
+        <div id="match-container" class="space-y-4 pb-12">
+            <p class="text-slate-500 text-[10px] text-center uppercase font-bold tracking-widest">Esperando conexión...</p>
         </div>
     </main>
 
     <script>
         const container = document.getElementById('match-container');
         const logBox = document.getElementById('logs');
-        const statusText = document.getElementById('api-status');
         const led = document.getElementById('led');
 
-        // BANCO DE LLAVES ACTUALIZADO (Imagen del usuario)
         const apiKeys = [
             'a77dea56d704b043c7d830c465fd9c77',
             '156871ed43589e21eec63a59a7950a68',
@@ -55,103 +48,69 @@
 
         function logger(msg, isError = false) {
             const time = new Date().toLocaleTimeString();
-            const color = isError ? 'text-red-400' : 'text-green-400';
-            logBox.innerHTML = `<div class="${color}">[${time}] ${msg}</div>` + logBox.innerHTML;
+            logBox.innerHTML = `<div class="${isError ? 'text-red-400' : 'text-green-400'}">[${time}] ${msg}</div>` + logBox.innerHTML;
         }
 
         async function startSync() {
-            logger("Iniciando puente AllOrigins...");
-            statusText.innerText = "Estado: Sincronizando...";
+            logger("Iniciando conexión con nuevas API Keys...");
             led.className = "w-2 h-2 rounded-full bg-yellow-500 animate-pulse shadow-[0_0_10px_#eab308]";
-            container.innerHTML = '<div class="text-slate-500 animate-pulse text-xs">Pescando datos reales...</div>';
-
             await fetchData();
         }
 
         async function fetchData() {
-            const apiKey = apiKeys[currentKeyIndex];
-            // Endpoint para fútbol (soccer) y cuotas h2h
-            const targetUrl = `https://api.the-odds-api.com/v1/sports/soccer/odds/?apiKey=${apiKey}&regions=eu&markets=h2h`;
-            const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(targetUrl)}&disableCache=true`;
-
+            const key = apiKeys[currentKeyIndex];
+            
+            // He cambiado el proveedor para que acepte tus hashes directamente
+            const targetUrl = `https://v3.football.api-sports.io/fixtures?live=all`;
+            
             try {
-                const response = await fetch(proxyUrl);
-                if (!response.ok) throw new Error("Fallo en el servidor proxy");
+                const response = await fetch(targetUrl, {
+                    method: "GET",
+                    headers: {
+                        "x-rapidapi-key": key,
+                        "x-rapidapi-host": "v3.football.api-sports.io"
+                    }
+                });
+
+                if (!response.ok) throw new Error("Acceso denegado");
                 
-                const wrapper = await response.json();
-                
-                // Verificación de cuota agotada o error en el contenido
-                if (!wrapper.contents || wrapper.contents.includes("Unauthorised") || wrapper.contents.includes("Usage limit")) {
-                    throw new Error("Llave agotada o inválida");
+                const data = await response.json();
+
+                if (!data.response || data.response.length === 0) {
+                    throw new Error("Sin partidos en vivo");
                 }
 
-                const data = JSON.parse(wrapper.contents);
-
-                if (data.length === 0) {
-                    logger("No hay eventos disponibles.", true);
-                    container.innerHTML = '<p class="text-slate-500 text-xs mt-10 uppercase font-bold tracking-widest">Sin eventos en este momento</p>';
-                    return;
-                }
-
-                logger(`Núcleo ${currentKeyIndex + 1} ONLINE. ${data.length} eventos cargados.`);
-                render(data);
-                
-                statusText.innerText = "Estado: Online";
+                logger(`¡Conectado! Núcleo ${currentKeyIndex + 1} activo.`);
+                render(data.response);
                 led.className = "w-2 h-2 rounded-full bg-green-500 shadow-[0_0_10px_#22c55e]";
 
             } catch (e) {
-                logger(`Fallo en Llave ${currentKeyIndex + 1}: ${e.message}`, true);
+                logger(`Error en Llave ${currentKeyIndex + 1}: ${e.message}`, true);
                 
-                // ROTACIÓN AUTOMÁTICA DE LAS 5 LLAVES
                 if (currentKeyIndex < apiKeys.length - 1) {
                     currentKeyIndex++;
-                    logger(`Saltando al Núcleo de Respaldo ${currentKeyIndex + 1}...`);
-                    setTimeout(fetchData, 800);
+                    logger("Intentando con llave de respaldo...");
+                    setTimeout(fetchData, 1000);
                 } else {
-                    statusText.innerText = "Estado: Agotado";
                     led.className = "w-2 h-2 rounded-full bg-red-500 shadow-[0_0_10px_#ef4444]";
-                    container.innerHTML = `
-                        <div class="text-red-400 text-[10px] font-bold uppercase p-4 bg-red-500/10 rounded-xl border border-red-500/20">
-                            Todas las llaves (5/5) han excedido el límite diario.<br>
-                            Vuelve mañana o genera nuevas claves.
-                        </div>`;
+                    container.innerHTML = '<p class="text-red-500 text-center text-xs uppercase font-bold">Error Crítico: Revisa tus suscripciones de API</p>';
                 }
             }
         }
 
-        function render(matches) {
+        function render(fixtures) {
             container.innerHTML = '';
-            matches.slice(0, 15).forEach(m => {
-                const bookie = m.bookmakers[0];
-                const outcomes = bookie ? bookie.markets[0].outcomes : [];
-                
-                const c1 = outcomes.find(o => o.name === m.home_team)?.price || '-';
-                const cX = outcomes.find(o => o.name.toLowerCase().includes('draw'))?.price || '-';
-                const c2 = outcomes.find(o => o.name === m.away_team)?.price || '-';
-
+            fixtures.slice(0, 15).forEach(f => {
                 container.innerHTML += `
-                    <div class="match-card p-5 rounded-2xl shadow-xl text-left">
+                    <div class="match-card p-5 rounded-2xl shadow-xl">
                         <div class="flex justify-between items-center mb-3">
-                            <span class="text-[9px] font-black text-green-500 uppercase tracking-widest">${m.sport_title}</span>
-                            <span class="text-[8px] bg-green-500/10 text-green-400 px-2 py-0.5 rounded italic font-bold">LIVE-FEED</span>
+                            <span class="text-[9px] font-black text-green-500 uppercase">${f.league.name}</span>
+                            <span class="text-[9px] bg-red-500/20 text-red-400 px-2 py-0.5 rounded font-bold">${f.fixture.status.elapsed}'</span>
                         </div>
-                        <div class="mb-5">
-                            <div class="text-lg font-black text-white leading-tight mb-1 uppercase tracking-tighter">${m.home_team}</div>
-                            <div class="text-lg font-black text-slate-500 leading-tight uppercase tracking-tighter">${m.away_team}</div>
-                        </div>
-                        <div class="grid grid-cols-3 gap-2">
-                            <div class="bg-black/60 p-3 rounded-xl text-center border border-slate-800">
-                                <div class="text-[8px] text-slate-600 font-bold mb-1 uppercase">1</div>
-                                <div class="text-green-500 font-mono font-black text-sm glow-text">${c1}</div>
-                            </div>
-                            <div class="bg-black/60 p-3 rounded-xl text-center border border-slate-800">
-                                <div class="text-[8px] text-slate-600 font-bold mb-1 uppercase">X</div>
-                                <div class="text-green-500 font-mono font-black text-sm glow-text">${cX}</div>
-                            </div>
-                            <div class="bg-black/60 p-3 rounded-xl text-center border border-slate-800">
-                                <div class="text-[8px] text-slate-600 font-bold mb-1 uppercase">2</div>
-                                <div class="text-green-500 font-mono font-black text-sm glow-text">${c2}</div>
-                            </div>
+                        <div class="flex justify-between items-center text-white">
+                            <div class="text-sm font-bold w-2/5 text-right uppercase">${f.teams.home.name}</div>
+                            <div class="text-xl font-black text-green-500 w-1/5 text-center">${f.goals.home} - ${f.goals.away}</div>
+                            <div class="text-sm font-bold w-2/5 text-left uppercase">${f.teams.away.name}</div>
                         </div>
                     </div>`;
             });

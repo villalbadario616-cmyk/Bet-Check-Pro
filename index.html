@@ -25,6 +25,7 @@
     <main class="p-4 max-w-md mx-auto">
         <div id="logs" class="mb-4 p-3 bg-black rounded-xl border border-slate-800 font-mono text-[10px] text-green-400 h-28 overflow-y-auto leading-tight shadow-inner">
             > Nodo central activo en GitHub Pages...
+            > Esperando sincronización de 5 núcleos API.
         </div>
 
         <button onclick="startSync()" class="w-full bg-green-600 hover:bg-green-500 py-4 rounded-2xl font-black uppercase italic tracking-widest mb-8 shadow-lg shadow-green-900/40 active:scale-95 transition-all">
@@ -42,16 +43,20 @@
         const statusText = document.getElementById('api-status');
         const led = document.getElementById('led');
 
-        // BANCO DE LLAVES: Aquí pondremos las 5 llaves nuevas
+        // BANCO DE LLAVES ACTUALIZADO (Imagen del usuario)
         const apiKeys = [
-            '49f214929bc6d4a938a13b4886dc2065', // Llave 1
-            '0e25785a864980a37373809079743916'  // Llave 2 (Respaldo)
+            'a77dea56d704b043c7d830c465fd9c77',
+            '156871ed43589e21eec63a59a7950a68',
+            'd5cb67fc71d47c4baab01ee7b11c651b',
+            '2db659a3764ff534635b09ec70e32d87',
+            'bf7bfaf1f8ae1db4ab392cef02d0f6ec'
         ];
         let currentKeyIndex = 0;
 
         function logger(msg, isError = false) {
             const time = new Date().toLocaleTimeString();
-            logBox.innerHTML = `<div class="${isError ? 'text-red-400' : 'text-green-400'}">[${time}] ${msg}</div>` + logBox.innerHTML;
+            const color = isError ? 'text-red-400' : 'text-green-400';
+            logBox.innerHTML = `<div class="${color}">[${time}] ${msg}</div>` + logBox.innerHTML;
         }
 
         async function startSync() {
@@ -65,46 +70,51 @@
 
         async function fetchData() {
             const apiKey = apiKeys[currentKeyIndex];
+            // Endpoint para fútbol (soccer) y cuotas h2h
             const targetUrl = `https://api.the-odds-api.com/v1/sports/soccer/odds/?apiKey=${apiKey}&regions=eu&markets=h2h`;
             const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(targetUrl)}&disableCache=true`;
 
             try {
                 const response = await fetch(proxyUrl);
-                if (!response.ok) throw new Error("Fallo en el servidor AllOrigins");
+                if (!response.ok) throw new Error("Fallo en el servidor proxy");
                 
                 const wrapper = await response.json();
                 
-                // Verificamos si la respuesta contiene errores de la API original
-                if (wrapper.contents.includes("Unauthorised") || wrapper.contents.includes("Usage limit")) {
-                    throw new Error("Límite de API excedido");
+                // Verificación de cuota agotada o error en el contenido
+                if (!wrapper.contents || wrapper.contents.includes("Unauthorised") || wrapper.contents.includes("Usage limit")) {
+                    throw new Error("Llave agotada o inválida");
                 }
 
                 const data = JSON.parse(wrapper.contents);
 
                 if (data.length === 0) {
-                    logger("No hay partidos próximos disponibles.", true);
-                    container.innerHTML = '<p class="text-slate-500 text-xs mt-10 uppercase font-bold tracking-widest">Sin eventos en vivo ahora</p>';
+                    logger("No hay eventos disponibles.", true);
+                    container.innerHTML = '<p class="text-slate-500 text-xs mt-10 uppercase font-bold tracking-widest">Sin eventos en este momento</p>';
                     return;
                 }
 
-                logger(`Éxito: ${data.length} mercados cargados.`);
+                logger(`Núcleo ${currentKeyIndex + 1} ONLINE. ${data.length} eventos cargados.`);
                 render(data);
                 
                 statusText.innerText = "Estado: Online";
                 led.className = "w-2 h-2 rounded-full bg-green-500 shadow-[0_0_10px_#22c55e]";
 
             } catch (e) {
-                logger(`Error con Llave ${currentKeyIndex + 1}: ${e.message}`, true);
+                logger(`Fallo en Llave ${currentKeyIndex + 1}: ${e.message}`, true);
                 
-                // INTENTO DE ROTACIÓN AUTOMÁTICA
+                // ROTACIÓN AUTOMÁTICA DE LAS 5 LLAVES
                 if (currentKeyIndex < apiKeys.length - 1) {
                     currentKeyIndex++;
-                    logger("Cambiando a llave de respaldo...");
-                    setTimeout(fetchData, 1000);
+                    logger(`Saltando al Núcleo de Respaldo ${currentKeyIndex + 1}...`);
+                    setTimeout(fetchData, 800);
                 } else {
-                    statusText.innerText = "Estado: Bloqueado";
+                    statusText.innerText = "Estado: Agotado";
                     led.className = "w-2 h-2 rounded-full bg-red-500 shadow-[0_0_10px_#ef4444]";
-                    container.innerHTML = '<div class="text-red-400 text-[10px] font-bold uppercase p-4 bg-red-500/10 rounded-xl border border-red-500/20">Se requiere nueva llave API. Revisa el terminal.</div>';
+                    container.innerHTML = `
+                        <div class="text-red-400 text-[10px] font-bold uppercase p-4 bg-red-500/10 rounded-xl border border-red-500/20">
+                            Todas las llaves (5/5) han excedido el límite diario.<br>
+                            Vuelve mañana o genera nuevas claves.
+                        </div>`;
                 }
             }
         }
@@ -115,15 +125,15 @@
                 const bookie = m.bookmakers[0];
                 const outcomes = bookie ? bookie.markets[0].outcomes : [];
                 
-                const c1 = outcomes.find(o => o.name === m.home_team)?.price || 'N/A';
-                const cX = outcomes.find(o => o.name.toLowerCase().includes('draw'))?.price || 'N/A';
-                const c2 = outcomes.find(o => o.name === m.away_team)?.price || 'N/A';
+                const c1 = outcomes.find(o => o.name === m.home_team)?.price || '-';
+                const cX = outcomes.find(o => o.name.toLowerCase().includes('draw'))?.price || '-';
+                const c2 = outcomes.find(o => o.name === m.away_team)?.price || '-';
 
                 container.innerHTML += `
                     <div class="match-card p-5 rounded-2xl shadow-xl text-left">
                         <div class="flex justify-between items-center mb-3">
                             <span class="text-[9px] font-black text-green-500 uppercase tracking-widest">${m.sport_title}</span>
-                            <span class="text-[8px] bg-green-500/10 text-green-400 px-2 py-0.5 rounded italic font-bold">VIVO</span>
+                            <span class="text-[8px] bg-green-500/10 text-green-400 px-2 py-0.5 rounded italic font-bold">LIVE-FEED</span>
                         </div>
                         <div class="mb-5">
                             <div class="text-lg font-black text-white leading-tight mb-1 uppercase tracking-tighter">${m.home_team}</div>
@@ -149,4 +159,3 @@
     </script>
 </body>
 </html>
-if (data.length

@@ -3,40 +3,46 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bet-Check Pro | Final Fix</title>
+    <title>Bet-Check Pro | Final Production</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         body { background-color: #020617; font-family: ui-sans-serif, system-ui; }
-        .match-card { background: #0f172a; border: 1px solid #1e293b; border-left: 4px solid #22c55e; }
+        .match-card { background: #0f172a; border: 1px solid #1e293b; border-left: 4px solid #22c55e; transition: transform 0.2s; }
+        .match-card:active { transform: scale(0.98); }
         .glow-text { text-shadow: 0 0 8px rgba(34, 197, 94, 0.4); }
     </style>
 </head>
 <body class="text-slate-100">
 
     <nav class="sticky top-0 z-50 bg-slate-900/95 border-b border-slate-800 px-6 py-4 flex justify-between items-center">
-        <h1 class="text-xl font-black italic uppercase text-white">Bet-Check <span class="text-green-500">Pro</span></h1>
+        <div>
+            <h1 class="text-xl font-black italic tracking-tighter uppercase text-white">Bet-Check <span class="text-green-500">Pro</span></h1>
+            <p id="api-status" class="text-[9px] font-bold text-slate-500 uppercase tracking-widest">Estado: Online</p>
+        </div>
         <div id="led" class="w-2 h-2 rounded-full bg-yellow-500 shadow-[0_0_10px_#eab308]"></div>
     </nav>
 
     <main class="p-4 max-w-md mx-auto">
         <div id="logs" class="mb-4 p-3 bg-black rounded-xl border border-slate-800 font-mono text-[10px] text-green-400 h-28 overflow-y-auto leading-tight shadow-inner">
-            > Sistema reconfigurado. Listo para usar nuevas llaves.
+            > Sistema iniciado. Núcleos API listos...
         </div>
 
-        <button onclick="startSync()" class="w-full bg-green-600 hover:bg-green-500 py-4 rounded-2xl font-black uppercase italic tracking-widest mb-8 shadow-lg active:scale-95 transition-all">
-            Sincronizar Datos Reales
+        <button onclick="startSync()" class="w-full bg-green-600 hover:bg-green-500 py-4 rounded-2xl font-black uppercase italic tracking-widest mb-8 shadow-lg shadow-green-900/40 active:scale-95 transition-all">
+            Sincronizar Partidos de Hoy
         </button>
 
         <div id="match-container" class="space-y-4 pb-12">
-            <p class="text-slate-500 text-[10px] text-center uppercase font-bold tracking-widest">Esperando conexión...</p>
+            <p class="text-slate-500 text-[10px] text-center mt-10 uppercase font-bold tracking-[0.2em]">Pulsa el botón para conectar con el servidor</p>
         </div>
     </main>
 
     <script>
         const container = document.getElementById('match-container');
         const logBox = document.getElementById('logs');
+        const statusText = document.getElementById('api-status');
         const led = document.getElementById('led');
 
+        // BANCO DE LLAVES (Las tuyas de la imagen)
         const apiKeys = [
             'a77dea56d704b043c7d830c465fd9c77',
             '156871ed43589e21eec63a59a7950a68',
@@ -48,20 +54,27 @@
 
         function logger(msg, isError = false) {
             const time = new Date().toLocaleTimeString();
-            logBox.innerHTML = `<div class="${isError ? 'text-red-400' : 'text-green-400'}">[${time}] ${msg}</div>` + logBox.innerHTML;
+            const color = isError ? 'text-red-400' : 'text-green-400';
+            logBox.innerHTML = `<div class="${color}">[${time}] ${msg}</div>` + logBox.innerHTML;
         }
 
         async function startSync() {
-            logger("Iniciando conexión con nuevas API Keys...");
+            logger("Iniciando búsqueda de datos...");
+            statusText.innerText = "Estado: Sincronizando...";
             led.className = "w-2 h-2 rounded-full bg-yellow-500 animate-pulse shadow-[0_0_10px_#eab308]";
+            container.innerHTML = '<div class="text-slate-500 animate-pulse text-xs text-center uppercase tracking-widest">Extrayendo datos de hoy...</div>';
+
             await fetchData();
         }
 
         async function fetchData() {
             const key = apiKeys[currentKeyIndex];
             
-            // He cambiado el proveedor para que acepte tus hashes directamente
-            const targetUrl = `https://v3.football.api-sports.io/fixtures?live=all`;
+            // Obtenemos la fecha de hoy para Argentina (o donde estés)
+            const today = new Date().toISOString().split('T')[0];
+            
+            // Endpoint para todos los partidos del día
+            const targetUrl = `https://v3.football.api-sports.io/fixtures?date=${today}`;
             
             try {
                 const response = await fetch(targetUrl, {
@@ -72,45 +85,63 @@
                     }
                 });
 
-                if (!response.ok) throw new Error("Acceso denegado");
+                if (!response.ok) throw new Error("Acceso denegado (403/401)");
                 
                 const data = await response.json();
 
                 if (!data.response || data.response.length === 0) {
-                    throw new Error("Sin partidos en vivo");
+                    throw new Error("No hay partidos en la base de datos hoy");
                 }
 
-                logger(`¡Conectado! Núcleo ${currentKeyIndex + 1} activo.`);
+                logger(`¡Éxito! ${data.response.length} eventos encontrados con Núcleo ${currentKeyIndex + 1}.`);
                 render(data.response);
+                
+                statusText.innerText = "Estado: Online";
                 led.className = "w-2 h-2 rounded-full bg-green-500 shadow-[0_0_10px_#22c55e]";
 
             } catch (e) {
-                logger(`Error en Llave ${currentKeyIndex + 1}: ${e.message}`, true);
+                logger(`Fallo en Llave ${currentKeyIndex + 1}: ${e.message}`, true);
                 
                 if (currentKeyIndex < apiKeys.length - 1) {
                     currentKeyIndex++;
-                    logger("Intentando con llave de respaldo...");
-                    setTimeout(fetchData, 1000);
+                    logger(`Activando Llave de Respaldo ${currentKeyIndex + 1}...`);
+                    setTimeout(fetchData, 800);
                 } else {
+                    statusText.innerText = "Estado: Bloqueado";
                     led.className = "w-2 h-2 rounded-full bg-red-500 shadow-[0_0_10px_#ef4444]";
-                    container.innerHTML = '<p class="text-red-500 text-center text-xs uppercase font-bold">Error Crítico: Revisa tus suscripciones de API</p>';
+                    container.innerHTML = `
+                        <div class="p-5 bg-red-500/10 border border-red-500/20 rounded-2xl text-center">
+                            <p class="text-red-400 text-[10px] font-black uppercase">Todas las llaves han fallado.</p>
+                            <p class="text-slate-400 text-[9px] mt-2">Revisa tu suscripción en dashboard.api-football.com</p>
+                        </div>`;
                 }
             }
         }
 
         function render(fixtures) {
             container.innerHTML = '';
-            fixtures.slice(0, 15).forEach(f => {
+            // Limitamos a los primeros 25 para no sobrecargar
+            fixtures.slice(0, 25).forEach(f => {
+                const status = f.fixture.status.short;
+                const goalsH = f.goals.home !== null ? f.goals.home : '-';
+                const goalsA = f.goals.away !== null ? f.goals.away : '-';
+                
                 container.innerHTML += `
                     <div class="match-card p-5 rounded-2xl shadow-xl">
-                        <div class="flex justify-between items-center mb-3">
-                            <span class="text-[9px] font-black text-green-500 uppercase">${f.league.name}</span>
-                            <span class="text-[9px] bg-red-500/20 text-red-400 px-2 py-0.5 rounded font-bold">${f.fixture.status.elapsed}'</span>
+                        <div class="flex justify-between items-center mb-4">
+                            <span class="text-[9px] font-black text-green-500 uppercase tracking-widest truncate w-2/3">${f.league.name}</span>
+                            <span class="text-[8px] bg-white/10 text-slate-300 px-2 py-0.5 rounded italic font-bold uppercase">${status}</span>
                         </div>
-                        <div class="flex justify-between items-center text-white">
-                            <div class="text-sm font-bold w-2/5 text-right uppercase">${f.teams.home.name}</div>
-                            <div class="text-xl font-black text-green-500 w-1/5 text-center">${f.goals.home} - ${f.goals.away}</div>
-                            <div class="text-sm font-bold w-2/5 text-left uppercase">${f.teams.away.name}</div>
+                        <div class="flex justify-between items-center gap-2">
+                            <div class="w-2/5 text-right">
+                                <p class="text-[11px] font-black text-white uppercase leading-tight">${f.teams.home.name}</p>
+                            </div>
+                            <div class="w-1/5 bg-black/40 py-2 rounded-xl border border-slate-800 text-center">
+                                <p class="text-lg font-black text-green-500 glow-text leading-none">${goalsH}:${goalsA}</p>
+                            </div>
+                            <div class="w-2/5 text-left">
+                                <p class="text-[11px] font-black text-white uppercase leading-tight">${f.teams.away.name}</p>
+                            </div>
                         </div>
                     </div>`;
             });
